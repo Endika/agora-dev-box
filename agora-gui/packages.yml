@@ -1,8 +1,9 @@
 ---
-- name: AgoraCoreView, Updating packages
+- name: AgoraGui, Updating packages
   sudo: true
   action: apt update_cache=yes
-- name: AgoraCoreView, Installing packages
+
+- name: AgoraGui, Installing packages
   sudo: true
   action: apt pkg={{item}} state=installed
   with_items:
@@ -10,5 +11,3 @@
     - gcc
     - g++
     - binutils
-    #- nodejs
-    #- npm

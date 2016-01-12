@@ -1,7 +1,34 @@
 # Complete Agora Voting deployment system
 
 This document describes the complete deployment of an Agora Voting system
-with two Authorities.
+with two Authorities for development purpuoses in your own physical machine
+through the usage of virtual machines.
+
+## Requirements
+
+You need a Linux x64 host machine with at least 4GB of RAM.
+
+- Vagrant
+
+We will use vagrant for managing the virtual machines. We recomend you to use
+the [latest version of vagrant that can be downloaded from here](https://www.vagrantup.com/downloads.html).
+
+- Vagrant snasphots plugin
+
+We'll use a vagrant plugin to create snapshots of the virtual machines.
+Snapshots allow us to go back and forth to a specific states of the virtual
+machines.
+
+You can install this plugin after having installed vagrant with the following
+command that needs to be executed with the user that will execute vagrant (not
+root):
+
+    vagrant plugin install vagrant-vbox-snapshot
+
+- VirtualBox
+
+To provision the virtual machines we'll make use of VirtualBox. Again, we
+recommend you to use the [latest version of VirtualBox that can be downloaded from here](https://www.virtualbox.org/wiki/Linux_Downloads).
 
 ## agora-dev-box
 
@@ -20,7 +47,7 @@ to use the 'next' branch, do:
 
 We need at least 3 servers to deploy a secure environment. We'll have two
 authorities and then another server with the authentication (authapi), the
-web interface (agora-core-view) and the ballot box (aogra\_elections).
+web interface (agora-gui) and the ballot box (aogra\_elections).
 
 The deployment is tested with ubuntu/trusty64, it should work with other
 ubuntu distributions, but maybe the deployment needs some tweaks.
@@ -44,23 +71,20 @@ and v.cpus (number of cpus):
 
     $ cd auth1
     auth1 $ cp doc/Vagrantfile.auth1 Vagrantfile
-    auth1 $ vagrant up --no-provision
-    auth1 $ vagrant ssh-config > ./vagrant.ssh.config
+    auth1 $ vagrant up --no-provision && vagrant ssh-config > ./vagrant.ssh.config
     auth1 $ cd ..
 
     $ cd auth2
     auth2 $ cp doc/Vagrantfile.auth2 Vagrantfile
-    auth2 $ vagrant up --no-provision
-    auth2 $ vagrant ssh-config > ./vagrant.ssh.config
+    auth2 $ vagrant up --no-provision && vagrant ssh-config > ./vagrant.ssh.config
     auth2 $ cd ..
 
     $ cd agora
     agora $ cp doc/Vagrantfile.agora Vagrantfile
-    agora $ vagrant up --no-provision
-    agora $ vagrant ssh-config > ./vagrant.ssh.config
+    agora $ vagrant up --no-provision && vagrant ssh-config > ./vagrant.ssh.config
     agora $ cd ..
 
-Now we've three basic ubuntu machines connected with these ips:
+Now we've three basic Ubuntu 14.04.3 LTS (Trusty Tahr) machines connected with these ips:
 
  * auth1: 192.168.50.2
  * auth2: 192.168.50.3
@@ -68,17 +92,35 @@ Now we've three basic ubuntu machines connected with these ips:
 
 So you should add this to your /etc/hosts to be able to access them by name:
 
-    echo "192.168.50.2 local-auth1" >> /etc/hosts
-    echo "192.168.50.3 local-auth2" >> /etc/hosts
-    echo "192.168.50.4 agora" >> /etc/hosts
+    echo -e "192.168.50.2 local-auth1\n192.168.50.3 local-auth2\n192.168.50.4 agora"  | sudo tee -a /etc/hosts
 
-If you receive the message `/etc/hosts: Permission denied` try:
+## Base provisioning
 
-    echo "192.168.50.2 local-auth1" | sudo tee -a /etc/hosts
-    echo "192.168.50.3 local-auth2" | sudo tee -a /etc/hosts
-    echo "192.168.50.4 agora" | sudo tee -a /etc/hosts
+Although recommended, this step can be ignored. This step will allow us to
+create a basic VM snapshot with java and other package dependencies installed
+so that provisioning can be done in a quicker manner.
+
+    $ cd auth1
+    auth1 $ cp doc/auth1.config.yml config.yml
+    auth1 $ cp doc/base.playbook.yml playbook.yml
+    auth1 $ vagrant provision
+    auth1 $ vagrant snapshot take base
+
+    $ cd auth2
+    auth2 $ cp doc/auth2.config.yml config.yml
+    auth2 $ cp doc/base.playbook.yml playbook.yml
+    auth2 $ vagrant provision
+    auth2 $ vagrant snapshot take base
+
+    $ cd agora
+    agora $ cp doc/agora.config.yml config.yml
+    agora $ cp doc/base.playbook.yml playbook.yml
+    agora $ vagrant provision
+    agora $ vagrant snapshot take base
 
 ## Authorities server
+
+### Provisioning
 
 We need to deploy the two authorities and connect them. The deployment
 process is the same for both authorities.
@@ -87,9 +129,7 @@ process is the same for both authorities.
     auth1 $ cp doc/auth1.config.yml config.yml
     auth1 $ cp doc/auth.playbook.yml playbook.yml
     auth1 $ vagrant provision
-    auth1 $ vagrant ssh
-    local-auth1 $ sudo eopeers --show-mine | tee /home/vagrant/auth1.pkg >/dev/null
-    local-auth1 $ exit
+    auth1 $ vagrant ssh -c "sudo eopeers --show-mine | tee /home/vagrant/auth1.pkg >/dev/null"
     auth1 $ scp -F vagrant.ssh.config default:/home/vagrant/auth1.pkg auth1.pkg
     auth1 $ cd ..
 
@@ -97,9 +137,7 @@ process is the same for both authorities.
     auth2 $ cp doc/auth2.config.yml config.yml
     auth2 $ cp doc/auth.playbook.yml playbook.yml
     auth2 $ vagrant provision
-    auth2 $ vagrant ssh
-    local-auth2 $ sudo eopeers --show-mine | tee /home/vagrant/auth2.pkg >/dev/null
-    local-auth2 $ exit
+    auth2 $ vagrant ssh -c "sudo eopeers --show-mine | tee /home/vagrant/auth2.pkg >/dev/null"
     auth2 $ scp -F vagrant.ssh.config default:/home/vagrant/auth2.pkg auth2.pkg
     auth2 $ cd ..
 
@@ -153,18 +191,12 @@ certificate sharing with the eopeers tool.
 
     $ cd auth1
     auth1 $ scp -F vagrant.ssh.config ../auth2/auth2.pkg default:/home/vagrant/auth2.pkg
-    auth1 $ vagrant ssh
-    local-auth1 $ sudo eopeers --install /home/vagrant/auth2.pkg
-    local-auth1 $ sudo service nginx restart
-    local-auth1 $ exit
+    auth1 $ vagrant ssh -c "sudo eopeers --install /home/vagrant/auth2.pkg && sudo service nginx restart"
     auth1 $ cd ..
 
     $ cd auth2
     auth2 $ scp -F vagrant.ssh.config ../auth1/auth1.pkg default:/home/vagrant/auth1.pkg
-    auth2 $ vagrant ssh
-    local-auth2 $ sudo eopeers --install /home/vagrant/auth1.pkg
-    local-auth2 $ sudo service nginx restart
-    local-auth2 $ exit
+    auth1 $ vagrant ssh -c "sudo eopeers --install /home/vagrant/auth1.pkg && sudo service nginx restart"
     auth2 $ cd ..
 
 ### Test the connection between the authorities
@@ -173,35 +205,40 @@ A tool is installed to test the real connection between the authorities.
 Open two terminal windows.  Open eolog in one of the terminal windows:
 
     $ cd auth2
-    auth2 $ vagrant ssh
-    local-auth2 $ sudo eolog
+    auth2 $ vagrant ssh -c "sudo eolog"
 
 Run eotest in the other terminal window from the other auth server:
 
     $ cd auth1
-    auth1 $ vagrant ssh
-    local-auth1 $ sudo eotest full --vmnd --vcount 100
+    auth1 $ vagrant ssh -c "sudo eotest full --vmnd --vcount 100"
 
 You should see the software working as eolog output will appear in the
-first terminal window.
+first terminal window. Once it the eotest command finishes, you can also close
+auth2 connection to eolog.
 
-Close the second terminal window.
-Exit the auth2 server:
+### Save snapshots
 
-    local-auth2 $ exit
+Once you have completed a complete test of the authorities and they are in
+working condition, it's recommended to save a snapshot from both:
+
+    $ cd auth1
+    auth1 $ vagrant snapshot take eotest-worked
+    auth1 $ cd ..
+
+    $ cd auth2
+    auth2 $ vagrant snapshot take eotest-worked
     auth2 $ cd ..
 
 ## Agora server (part 1)
+
+Let's provision the agora server in a similar fashion as we did with the
+authorities:
 
     $ cd agora
     agora $ cp doc/agora.config.yml config.yml
     agora $ cp doc/agora.playbook.yml playbook.yml
     agora $ vagrant provision
-
-    agora $ vagrant ssh
-    local-agora $ sudo eopeers --show-mine | tee /home/vagrant/agora.pkg >/dev/null
-    local-agora $ exit
-
+    agora $ vagrant ssh -c "sudo eopeers --show-mine | tee /home/vagrant/agora.pkg >/dev/null"
     agora $ scp -F vagrant.ssh.config default:/home/vagrant/agora.pkg agora.pkg
     agora $ cd ..
 
@@ -213,112 +250,26 @@ authorities to our eopeers.
 
     $ cd auth1
     auth1 $ scp -F vagrant.ssh.config ../agora/agora.pkg default:/home/vagrant/agora.pkg
-    auth1 $ vagrant ssh
-    local-auth1 $ sudo eopeers --install /home/vagrant/agora.pkg
-    local-auth1 $ sudo service nginx restart
-    local-auth1 $ exit
+    auth1 $ vagrant ssh -c "sudo eopeers --install /home/vagrant/agora.pkg; sudo service nginx restart"
     auth1 $ cd ..
 
     $ cd auth2
     auth2 $ scp -F vagrant.ssh.config ../agora/agora.pkg default:/home/vagrant/agora.pkg
-    auth2 $ vagrant ssh
-    local-auth2 $ sudo eopeers --install /home/vagrant/agora.pkg
-    local-auth2 $ sudo service nginx restart
-    local-auth2 $ exit
+    auth2 $ vagrant ssh -c "sudo eopeers --install /home/vagrant/agora.pkg; sudo service nginx restart"
     auth2 $ cd ..
 
     $ cd agora
-    agora $ scp -F vagrant.ssh.config ../auth1/auth1.pkg default:/home/vagrant/auth1.pkg
-    agora $ scp -F vagrant.ssh.config ../auth2/auth2.pkg default:/home/vagrant/auth2.pkg
-    agora $ vagrant ssh
-    local-agora $ sudo eopeers --install /home/vagrant/auth1.pkg --keystore /home/agoraelections/keystore.jks
-    local-agora $ sudo eopeers --install /home/vagrant/auth2.pkg
-    local-agora $ sudo service nginx restart
-    local-agora $ exit
-    agora $ cd ..
-
-
-## Agora server (part 2)
-
-    $ cd agora
-    agora $ vagrant ssh
-    local-agora $ sudo supervisorctl stop agora-elections
-    local-agora $ sudo su - agoraelections
-    local-agora $ cd /home/agoraelections/agora-elections
-    local-agora $ ../activator-1.2.12-minimal/activator run
-
-Then you should go to the following url in your local browser:
-
-    http://agora:9000/elections/api/election/1
-
-It should return a 404, but that will also create the agora\_elections database
-and we can continue configuring this server.
-
-    local-agora $ ../activator-1.2.12-minimal/activator clean stage
-    local-agora $ exit
-    local-agora $ sudo supervisorctl start agora-elections
-    local-agora $ exit
+    agora $ scp -F vagrant.ssh.config ../auth1/auth1.pkg ../auth2/auth2.pkg default:/home/vagrant/
+    agora $ vagrant ssh -c "sudo eopeers --install /home/vagrant/auth1.pkg --keystore /home/agoraelections/keystore.jks; sudo eopeers --install /home/vagrant/auth2.pkg; sudo service nginx restart"
     agora $ cd ..
 
 Having completed these steps, we now have a complete agora-voting installation.
 
-### Complete election test with agora-tools
+### Complete election test
 
-Currently there's no election creation form, but you can create an
-election using agora-admin.py in agora-tools.
+You can open your broswer and make the rest of the election using the admin:
 
-Download and configure agora-tools:
-
-    $ git clone https://github.com/agoravoting/agora-tools.git
-    $ cd agora-tools
-
-Note: sometimes the 'next' branch has important updates. In case you want
-to use the 'next' branch, do:
-
-    $ git checkout next
-
-You must have Python 3 installed to complete the following steps.
-
-Install dependencies:
-
-    agora-tools $ mkvirtualenv -p $(which python3) agora-tools
-    agora-tools $ pip install -r requirements.txt
-    agora-tools $ cp -r ../agora-dev-box/doc/agora-tools-configs/ localconfs
-
-Then you can edit the local election data, be sure to change at least the
-census file localconfs/data/local/0.census.json and add real emails.
-
-    agora-tools $ ./agora-admin.py -C localconfs/local.email.json -c localconfs/data/local/
-
-This should create the election and will give you the election id. The
-first time the election id should be 1.
-
-Now we need to configure authapi. Open the browser and enter this url:
-
-    https://agora/authapi/admin/
-
-Use the default credentials (or the ones you set in local.email.json):
-
-    username: admin
-    password: 123
-
-Once you are here, you need to fix the event for the admin to 1. Click on
-'User datas' below 'Api' and select admin. If you see that the selected
-Event is '--------'  you need to click on the drop'down list and select
-'1 - open' instead and then click Save.
-
-Go back to the main authapi configuration page and click on 'Codes' under
-'Authmethods', then click on 'add code'. On the Add code page, use the
-following and then click Save (you can change the code):
-
-    User: admin
-    Code: QWERTY33
-    Auth event id: 1
-
-Then you can open your broswer and make the rest of the election using the
-admin:
-
-    https://agora/#/admin/login
+    https://agora/admin/login
 
 Use the default credentials:
 
@@ -334,3 +285,53 @@ spam folder), stop the election, make the tally and view the results.
 
 The admin interface is currently in development so there're a lot of buttons
 that might not work.
+
+Once you have tested the election test, you should take a snapshot of your
+three machines, as a base working condition:
+
+    $ cd auth1
+    auth1 $ vagrant snapshot take working-base
+    auth1 $ cd  ..
+
+    $ cd auth2
+    auth2 $ vagrant snapshot take working-base
+    auth2 $ cd  ..
+
+    $ cd agora
+    agora $ vagrant snapshot take working-base
+    agora $ cd  ..
+
+### Troubleshooting
+
+#### Supervisor trouble
+
+If the we loads but the form doesn't show up, and when you analyze traffic some
+queries (for example  https://agora/authapi/api/auth-event/1/) return
+"502 Bad Gateway", this might be because supervisor might be dead. This is a bug
+that we don't know how to fix yet but has a simple solution: restart supervisor:
+
+You can check that supervisor is down when this happens:
+
+
+    $ cd agora
+    agora $ vagrant ssh -c "sudo supervisorctl status"
+
+        unix:///var/run/supervisor.sock no such file
+        Connection to 127.0.0.1 closed.
+
+If that's the case, restart it:
+
+    $ cd agora
+    agora $ vagrant ssh -c "sudo /etc/init.d/supervisor* restart"
+
+Afterwards, supervisor status should return something like this, which is ok:
+
+    $ cd agora
+    agora $ vagrant ssh -c "sudo supervisorctl status"
+
+        agora-elections                  RUNNING    pid 7665, uptime 0:00:04
+        authapi                          RUNNING    pid 7663, uptime 0:00:04
+        authapi_celery                   RUNNING    pid 7667, uptime 0:00:04
+        sentry                           RUNNING    pid 7664, uptime 0:00:04
+        sentry_celery                    RUNNING    pid 7666, uptime 0:00:04
+        Connection to 127.0.0.1 closed.
